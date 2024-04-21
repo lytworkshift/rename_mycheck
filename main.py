@@ -64,30 +64,60 @@ def convert_pdfs_to_text():
                 with open(text_file_path, 'w') as text_file:
                     text_file.write(text)
 
-def extract_date_and_rename():
-    # Go through each text file and extract dates on lines 29 and 35 to rename the original PDF
+
+from datetime import datetime
+import os
+
+
+# Assuming other necessary imports and function definitions are already in place
+
+def extract_date_and_prepare_renaming():
+    renaming_info = []
+
     for text_filename in os.listdir(output_text_dir):
         if text_filename.endswith('.txt'):
-            text_file_path = os.path.join(output_text_dir, text_filename)
-            with open(text_file_path, 'r') as file:
+            with open(os.path.join(output_text_dir, text_filename), 'r') as file:
                 lines = file.readlines()
-                date_str_line_29 = lines[28].strip()  # Line 29 has index 28
-                date_str_line_35 = lines[34].strip()  # Line 35 has index 34
-                # Try parsing the date from line 29 first, then line 35
-                for date_str in [date_str_line_29, date_str_line_35]:
-                    try:
-                        payment_date = datetime.strptime(date_str, "%d-%b-%Y").strftime("%Y-%b-%d")
-                        original_pdf_filename = text_filename.replace('.txt', '')
-                        original_pdf_path = os.path.join(root_dir, original_pdf_filename)
-                        new_pdf_name = payment_date + '.pdf'
-                        new_pdf_path = os.path.join(root_dir, new_pdf_name)
-                        os.rename(original_pdf_path, new_pdf_path)
-                        print(f"Renamed '{original_pdf_filename}' to '{new_pdf_name}'")
-                        break  # Stop if we've successfully renamed the file
-                    except ValueError:
-                        continue  # If parsing failed, try the next date string
+                period_line = lines[1].strip()
+                start_date_str, end_date_str = period_line.replace('For the Period: ', '').split(' thru ')
+
+                # Sortable date formatting
+                start_date = datetime.strptime(start_date_str, "%m/%d/%y")
+                end_date = datetime.strptime(end_date_str, "%m/%d/%y")
+
+                original_pdf_filename = text_filename[:-4]
+                original_pdf_path = os.path.join(root_dir, original_pdf_filename)
+
+                new_pdf_base_name = f"{start_date.strftime('%Y-%m-%d')}to{end_date.strftime('%Y-%m-%d')}"
+                new_pdf_name = new_pdf_base_name + ".pdf"
+
+                renaming_info.append((start_date, original_pdf_path, new_pdf_name))
+
+    return renaming_info
+
+
+def rename_files_chronologically():
+    renaming_info = extract_date_and_prepare_renaming()
+    renaming_info_sorted = sorted(renaming_info, key=lambda x: x[0])
+
+    for _, original_pdf_path, new_pdf_name in renaming_info_sorted:
+        new_pdf_path = os.path.join(root_dir, new_pdf_name)
+        counter = 1
+
+        # Extract base name for use in duplicate handling
+        new_pdf_base_name = new_pdf_name.rsplit('.', 1)[0]
+
+        while os.path.exists(new_pdf_path):
+            # Increment the name with a counter if duplicates exist
+            new_pdf_name = f"{new_pdf_base_name}_{counter}.pdf"
+            new_pdf_path = os.path.join(root_dir, new_pdf_name)
+            counter += 1
+
+        os.rename(original_pdf_path, new_pdf_path)
+        print(f"Renamed '{original_pdf_path}' to '{new_pdf_name}'")
+
 
 # Run the whole process
 create_backup()
 convert_pdfs_to_text()
-extract_date_and_rename()
+rename_files_chronologically()
